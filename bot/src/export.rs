@@ -97,6 +97,7 @@ pub fn export_to_db(epoch: Epoch, config: &Config, rpc_client: &RpcClient) -> Bo
     if confirmed_blocks.is_err() {
         // info!("could not get confirmed blocks; skip rate cannot be recorded");
         // blocks_and_slots = None;
+        error!("{:?}", confirmed_blocks.err());
         return Err("Could not get confirmed blocks; skip rate cannot be recorded".into());
     } else {
         let leader_schedule = rpc_client
@@ -243,16 +244,17 @@ fn update_keypair_table(transaction: &mut Transaction<'_>) -> BoxResult<()> {
 
     info!("Got {} participants", participants.len());
 
-    for (_, participant) in participants {
+    for (pubkey, participant) in participants {
+        info!("SELECTing {:?}", &pubkey);
         let rows = transaction.query(
-            r#"SELECT id, state from "ValidatorKeyPair"
-            WHERE mainnet_beta_pk=$1 AND
-            testnet_pk=$2"#,
+            r#"SELECT id, mainnet_beta_pk, testnet_pk, state
+            FROM "ValidatorKeyPair"
+            WHERE pubkey=$1"#,
             &[
-                &participant.mainnet_identity.to_string(),
-                &participant.testnet_identity.to_string(),
+                &pubkey.to_string()
             ],
         )?;
+        info!("got {:?}", &pubkey);
 
         // this strange incantation get the string without surrounding quotation marks
         let previous_state = &serde_json::to_value(&participant.state)?
@@ -260,30 +262,47 @@ fn update_keypair_table(transaction: &mut Transaction<'_>) -> BoxResult<()> {
             .unwrap()
             .to_string();
 
+
         if rows.is_empty() {
+            info!("INSERTing {:?}", &pubkey);
             transaction.execute(
                 r#"INSERT INTO "ValidatorKeyPair"
-                                    (mainnet_beta_pk, testnet_pk, state)
-                                    VALUES ($1, $2, $3)"#,
+                                    (mainnet_beta_pk, testnet_pk, state, pubkey)
+                                    VALUES ($1, $2, $3, $4)"#,
                 &[
                     &participant.mainnet_identity.to_string(),
                     &participant.testnet_identity.to_string(),
                     previous_state,
+                    &pubkey.to_string()
                 ],
             )?;
         } else if rows.len() == 1 {
+            info!("UPDATEing {:?}", &pubkey);
             let row = rows.first().unwrap();
 
             let current_state: String = row.get("state");
+            let current_mk: String = row.get("mainnet_beta_pk");
+            let current_tk: String = row.get("testnet_pk");
 
-            if &current_state != previous_state {
+            if &current_state != previous_state ||
+                &current_mk != &participant.mainnet_identity.to_string() ||
+                &current_tk != &participant.testnet_identity.to_string() {
                 let id: i32 = row.get("id");
+
+                info!("Updating {}", id);
 
                 transaction.execute(
                     r#"UPDATE "ValidatorKeyPair"
-                SET state=$1
+                SET state=$1,
+                    mainnet_beta_pk=$2,
+                    testnet_pk=$3
                 WHERE id=$2"#,
-                    &[&previous_state, &id],
+                    &[
+                        &previous_state,
+                        &participant.mainnet_identity.to_string(),
+                        &participant.testnet_identity.to_string(),
+                        &id
+                    ],
                 )?;
             }
         } else {
