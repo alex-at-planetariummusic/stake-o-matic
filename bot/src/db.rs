@@ -1,11 +1,12 @@
+use crate::InfrastructureConcentrationAffects;
 use {
     crate::{
         data_center_info::{DataCenterId, DataCenterInfo},
         generic_stake_pool::ValidatorStakeState,
     },
     log::*,
+    semver::Version,
     serde::{Deserialize, Serialize},
-    serde_yaml::{Mapping, Value},
     solana_sdk::{clock::Epoch, pubkey::Pubkey},
     std::{
         collections::HashMap,
@@ -53,8 +54,10 @@ pub struct ValidatorClassification {
 
     pub self_stake: Option<u64>,
 
-    // Whether this is the first eppoch the validator is a resident of current_data_center
+    // Whether this is the first epoch the validator is a resident of current_data_center
     pub new_data_center_residency: Option<bool>,
+
+    pub release_version: Option<Version>,
 }
 
 impl ValidatorClassification {
@@ -100,10 +103,41 @@ pub struct EpochClassificationV1 {
     pub notes: Vec<String>,
 
     // Config values from Config struct
-    pub config: Option<Value>,
+    pub config: Option<EpochConfig>,
 
     // General info about the Epoch
-    pub info: Option<Mapping>,
+    pub stats: Option<EpochStats>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct EpochStats {
+    pub bonus_stake_amount: u64,
+    pub min_epoch_credits: u64,
+    pub avg_epoch_credits: u64,
+    pub max_skip_rate: usize,
+    pub cluster_average_skip_rate: usize,
+    pub total_active_stake: u64,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct EpochConfig {
+    pub require_classification: Option<bool>,
+    pub quality_block_producer_percentage: Option<usize>,
+    pub max_poor_block_producer_percentage: Option<usize>,
+    pub max_commission: Option<u8>,
+    pub min_release_version: Option<semver::Version>,
+    pub max_old_release_version_percentage: Option<usize>,
+    pub max_poor_voter_percentage: Option<usize>,
+    pub max_infrastructure_concentration: Option<f64>,
+    pub infrastructure_concentration_affects: Option<InfrastructureConcentrationAffects>,
+    pub bad_cluster_average_skip_rate: Option<usize>,
+    pub min_epoch_credit_percentage_of_average: Option<usize>,
+    pub min_self_stake_lamports: Option<u64>,
+    pub max_active_stake_lamports: Option<u64>,
+    pub enforce_min_self_stake: Option<bool>,
+    pub enforce_testnet_participation: Option<bool>,
+    pub min_testnet_participation: Option<(/*n:*/ usize, /*m:*/ usize)>,
+    pub baseline_stake_amount_lamports: Option<u64>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]

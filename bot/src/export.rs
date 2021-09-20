@@ -89,39 +89,39 @@ pub fn export_to_db(epoch: Epoch, config: &Config, rpc_client: &RpcClient) -> Bo
 
     // TODO: save skip rate in yaml, and only make these rpc calls if skip rate is not found in yaml
     // This gives us Err if the first/last slots are outside the range that rpc_client.get_account_with_commitment returns
-    let confirmed_blocks =
-        get_confirmed_blocks(rpc_client, first_slot_in_epoch, last_slot_in_epoch);
+    // let confirmed_blocks =
+    //     get_confirmed_blocks(rpc_client, first_slot_in_epoch, last_slot_in_epoch);
 
-    let blocks_and_slots;
+    // let blocks_and_slots;
 
-    if confirmed_blocks.is_err() {
-        // info!("could not get confirmed blocks; skip rate cannot be recorded");
-        // blocks_and_slots = None;
-        error!("{:?}", confirmed_blocks.err());
-        return Err("Could not get confirmed blocks; skip rate cannot be recorded".into());
-    } else {
-        let leader_schedule = rpc_client
-            .get_leader_schedule_with_commitment(
-                Some(first_slot_in_epoch),
-                CommitmentConfig::finalized(),
-            )?
-            .unwrap();
-
-        let (
-            _quality_block_producers,
-            _poor_block_producers,
-            _block_producer_classification_reason,
-            _cluster_average_skip_rate,
-            _too_many_poor_block_producers,
-            bns,
-        ) = classify_producers(
-            first_slot_in_epoch,
-            confirmed_blocks.unwrap(),
-            leader_schedule,
-            &config,
-        )?;
-        blocks_and_slots = Some(bns);
-    }
+    // if confirmed_blocks.is_err() {
+    //     // info!("could not get confirmed blocks; skip rate cannot be recorded");
+    //     // blocks_and_slots = None;
+    //     error!("{:?}", confirmed_blocks.err());
+    //     return Err("Could not get confirmed blocks; skip rate cannot be recorded".into());
+    // } else {
+    //     let leader_schedule = rpc_client
+    //         .get_leader_schedule_with_commitment(
+    //             Some(first_slot_in_epoch),
+    //             CommitmentConfig::finalized(),
+    //         )?
+    //         .unwrap();
+    //
+    //     let (
+    //         _quality_block_producers,
+    //         _poor_block_producers,
+    //         _block_producer_classification_reason,
+    //         _cluster_average_skip_rate,
+    //         _too_many_poor_block_producers,
+    //         bns,
+    //     ) = classify_producers(
+    //         first_slot_in_epoch,
+    //         confirmed_blocks.unwrap(),
+    //         leader_schedule,
+    //         &config,
+    //     )?;
+    //     blocks_and_slots = Some(bns);
+    // }
 
     let (vote_account_info, _total_active_stake) = get_vote_account_info(&rpc_client, epoch)?;
 
@@ -171,14 +171,26 @@ pub fn export_to_db(epoch: Epoch, config: &Config, rpc_client: &RpcClient) -> Bo
             serde_json::to_value(&validator_classification.notes)?,
         );
 
-        if blocks_and_slots.is_some() {
-            let b_n_s = blocks_and_slots.clone().unwrap();
-            let val_b_n_s = b_n_s.get(&validator_pk);
-            if let Some((blocks, slots)) = val_b_n_s {
-                stats.insert("blocks".to_string(), serde_json::to_value(blocks)?);
-                stats.insert("slots".to_string(), serde_json::to_value(slots)?);
-            }
+        if validator_classification.blocks.is_some() && validator_classification.slots.is_some() {
+            let blocks = validator_classification.blocks.unwrap();
+            let slots = validator_classification.slots.unwrap();
+            info!("b/s {}/{}", blocks, slots);
+            stats.insert("blocks".to_string(), serde_json::to_value(blocks)?);
+            stats.insert("slots".to_string(), serde_json::to_value(slots)?);
+            info!("stats: {:?}", stats);
+        } else {
+            info!("No B/S for {:?}", validator_classification.participant);
+            // return Err("Could not find blocks/slots".into());
         }
+
+        // if blocks_and_slots.is_some() {
+        //     let b_n_s = blocks_and_slots.clone().unwrap();
+        //     let val_b_n_s = b_n_s.get(&validator_pk);
+        //     if let Some((blocks, slots)) = val_b_n_s {
+        //         stats.insert("blocks".to_string(), serde_json::to_value(blocks)?);
+        //         stats.insert("slots".to_string(), serde_json::to_value(slots)?);
+        //     }
+        // }
 
         stats.insert(
             "vote_credits".to_string(),
@@ -245,7 +257,7 @@ fn update_keypair_table(transaction: &mut Transaction<'_>) -> BoxResult<()> {
     info!("Got {} participants", participants.len());
 
     for (pubkey, participant) in participants {
-        info!("SELECTing {:?}", &pubkey);
+        // info!("SELECTing {:?}", &pubkey);
         let rows = transaction.query(
             r#"SELECT id, mainnet_beta_pk, testnet_pk, state
             FROM "ValidatorKeyPair"
@@ -264,7 +276,7 @@ fn update_keypair_table(transaction: &mut Transaction<'_>) -> BoxResult<()> {
 
 
         if rows.is_empty() {
-            info!("INSERTing {:?}", &pubkey);
+            // info!("INSERTing {:?}", &pubkey);
             transaction.execute(
                 r#"INSERT INTO "ValidatorKeyPair"
                                     (mainnet_beta_pk, testnet_pk, state, pubkey)

@@ -6,7 +6,7 @@ use {
         ArgMatches, SubCommand,
     },
     log::*,
-    serde::Serialize,
+    serde::{Deserialize, Serialize},
     serde_yaml::Mapping,
     solana_clap_utils::{
         input_parsers::{keypair_of, lamports_of_sol, pubkey_of},
@@ -64,7 +64,7 @@ pub enum InfrastructureConcentrationAffectKind {
     Warn(String),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum InfrastructureConcentrationAffects {
     WarnAll,
     DestakeListed(ValidatorList),
@@ -1523,7 +1523,12 @@ fn classify(
                 .unwrap_or_default();
             stake_states.insert(0, (stake_state, reason.clone()));
 
-            let (blocks, slots) = blocks_and_slots.get(&identity).unwrap();
+            // let (blocks, slots) = blocks_and_slots.get(&identity).unwrap();
+            let (blocks, slots) = match blocks_and_slots.get(&identity) {
+                Some((b, s)) => (Some(*b), Some(*s)),
+                None => (None, None),
+            };
+
 
             validator_classifications.insert(
                 identity,
@@ -1539,12 +1544,15 @@ fn classify(
                     current_data_center: Some(current_data_center.clone()),
                     participant,
                     prioritize_funding_in_next_epoch: None,
-                    blocks: Some(*blocks),
-                    slots: Some(*slots),
+                    blocks,
+                    slots,
                     vote_credits: Some(epoch_credits),
                     commission: Some(commission),
-                    self_stake: Some(*self_stake_by_vote_account.get(&identity).unwrap_or(&0)),
+                    self_stake: Some(self_stake),
                     new_data_center_residency: Some(new_validator),
+                    // HACK: only using this branch for export, so just need this branch of the code to compile
+                    // release_version: release_versions.get(&identity).cloned(),
+                    release_version: None,
                 },
             );
         }
@@ -1579,8 +1587,11 @@ fn classify(
         data_center_info: data_centers.info,
         validator_classifications,
         notes,
-        config: Some(serde_yaml::to_value(config).unwrap()),
-        info: Some(info),
+        // Hack
+        // config: Some(serde_yaml::to_value(config).unwrap()),
+        config: None,
+        // info: Some(info),
+        stats: None
     })
 }
 
@@ -1759,9 +1770,9 @@ fn main() -> BoxResult<()> {
                 validator_stake_change_notes.sort();
                 notifications.extend(validator_stake_change_notes);
 
-                if let Some(ref mut info) = epoch_classification.info {
-                    info.insert("bonus_stake_amount".into(), bonus_stake_amount.into());
-                }
+                // if let Some(ref mut info) = epoch_classification.info {
+                //     info.insert("bonus_stake_amount".into(), bonus_stake_amount.into());
+                // }
             }
 
             match (first_time, config.markdown_mode) {
