@@ -26,7 +26,7 @@ const DELEGATION_RENT: u64 = 2282880;
 
 // Minimum amount of lamports in a stake pool account. Without DELEGATION_RENT, we will be
 // below the miniumum delegation amount, and will get InsufficientDelegation errors
-pub const MIN_STAKE_ACCOUNT_BALANCE: u64 = MIN_STAKE_DELEGATION + DELEGATION_RENT;
+pub const MIN_STAKE_ACCOUNT_BALANCE: u64 = (MIN_STAKE_DELEGATION + DELEGATION_RENT) * 2;
 
 // Don't bother adjusting stake if less than this amount of lamports will be affected
 // (must be >= MIN_STAKE_ACCOUNT_BALANCE)
@@ -243,6 +243,8 @@ impl GenericStakePool for StakePool {
                 min_stake_node_count, baseline_stake_node_count, bonus_stake_node_count
             ),
         ];
+
+        info!("Stake pool notes: {:?}", notes);
 
         let busy_validators = validator_stake_actions
             .keys()
@@ -497,6 +499,7 @@ fn create_validator_stake_accounts(
         ..
     } in desired_validator_stake
     {
+        // set amount for address?
         let stake_address = validator_stake_address(authorized_staker.pubkey(), *vote_address);
         let stake_account = rpc_client
             .get_account_with_commitment(&stake_address, rpc_client.commitment())?
@@ -513,6 +516,7 @@ fn create_validator_stake_accounts(
                     )
                 })?;
 
+            // TODO: get balance of stake account
             match stake_activation.state {
                 StakeActivationState::Activating => {
                     let action = format!(
