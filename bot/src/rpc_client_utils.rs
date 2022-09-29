@@ -6,9 +6,9 @@ use {
         pubsub_client::PubsubClientError,
         rpc_client::RpcClient,
         rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig, RpcSendTransactionConfig},
-        rpc_filter,
+        rpc_filter::{Memcmp, RpcFilterType},
         rpc_request::MAX_GET_SIGNATURE_STATUSES_QUERY_ITEMS,
-        rpc_response::{Fees, RpcVoteAccountInfo, RpcVoteAccountStatus},
+        rpc_response::{RpcVoteAccountInfo, RpcVoteAccountStatus},
         tpu_client::{TpuClient, TpuClientConfig, TpuSenderError},
     },
     solana_sdk::{
@@ -111,11 +111,14 @@ pub fn send_and_confirm_transactions_with_spinner(
     let mut confirmed_transactions = 0;
     let mut block_height = rpc_client.get_block_height()?;
     while expired_blockhash_retries > 0 {
-        let Fees {
-            blockhash,
-            fee_calculator: _,
-            last_valid_block_height,
-        } = rpc_client.get_fees()?;
+        // let Fees {
+        //     blockhash,
+        //     fee_calculator: _,
+        //     last_valid_block_height,
+        // } = rpc_client.get_fees()?;
+
+        let blockhash = rpc_client.get_latest_blockhash()?;
+        let last_valid_block_height = rpc_client.get_block_height()?;
 
         let mut pending_transactions = HashMap::new();
         for (i, mut transaction) in transactions {
@@ -325,12 +328,13 @@ pub fn get_all_stake(
         &stake::program::id(),
         RpcProgramAccountsConfig {
             filters: Some(vec![
-                // Filter by `Meta::authorized::staker`, which begins at byte offset 12
-                rpc_filter::RpcFilterType::Memcmp(rpc_filter::Memcmp {
-                    offset: 12,
-                    bytes: rpc_filter::MemcmpEncodedBytes::Binary(authorized_staker.to_string()),
-                    encoding: Some(rpc_filter::MemcmpEncoding::Binary),
-                }),
+                RpcFilterType::Memcmp(Memcmp::new_raw_bytes(12, authorized_staker.as_ref().into())),
+                // rpc_filter::RpcFilterType::Memcmp(rpc_filter::Memcmp {
+                // -                    offset: 12,
+                // -                    bytes: rpc_filter::MemcmpEncodedBytes::Binary(authorized_staker.to_string())
+                // ,
+                // -                    encoding: Some(rpc_filter::MemcmpEncoding::Binary),
+                // -                }),
             ]),
             account_config: RpcAccountInfoConfig {
                 encoding: Some(solana_account_decoder::UiAccountEncoding::Base64),
@@ -446,7 +450,7 @@ pub mod test {
 
         transaction.sign(
             &[payer, identity_keypair, vote_keypair],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
@@ -471,10 +475,7 @@ pub mod test {
             Some(&payer.pubkey()),
         );
 
-        transaction.sign(
-            &[payer, &stake_keypair],
-            rpc_client.get_recent_blockhash()?.0,
-        );
+        transaction.sign(&[payer, &stake_keypair], rpc_client.get_latest_blockhash()?);
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
             .map(|_| stake_keypair)
@@ -494,7 +495,7 @@ pub mod test {
             )],
             Some(&authority.pubkey()),
             &[authority],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
@@ -564,7 +565,7 @@ pub mod test {
 
         transaction.sign(
             &[authorized_staker, &mint_keypair],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
@@ -602,7 +603,7 @@ pub mod test {
 
         transaction.sign(
             &[authorized_staker, &account_keypair],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
@@ -620,6 +621,7 @@ pub mod test {
         manager: &Keypair,
         staker: &Pubkey,
         max_validators: u32,
+        stake_pool_withdraw_authority: &Pubkey,
     ) -> client_error::Result<()> {
         let stake_pool_size = get_packed_len::<StakePool>();
         let stake_pool_rent = rpc_client
@@ -657,6 +659,7 @@ pub mod test {
                     &stake_pool.pubkey(),
                     &manager.pubkey(),
                     staker,
+                    stake_pool_withdraw_authority,
                     &validator_list.pubkey(),
                     reserve_stake,
                     pool_mint,
@@ -674,7 +677,7 @@ pub mod test {
         );
         transaction.sign(
             &[payer, stake_pool, &validator_list, manager],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
@@ -712,7 +715,7 @@ pub mod test {
             ),
             Some(&authorized_staker.pubkey()),
             &[authorized_staker],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)
@@ -745,7 +748,7 @@ pub mod test {
             )],
             Some(&authorized_staker.pubkey()),
             &[authorized_staker],
-            rpc_client.get_recent_blockhash()?.0,
+            rpc_client.get_latest_blockhash()?,
         );
         rpc_client
             .send_and_confirm_transaction_with_spinner(&transaction)

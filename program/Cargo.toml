@@ -17,8 +17,8 @@ test-bpf = []
 
 [dev-dependencies]
 assert_matches = "1.4.0"
-solana-program-test = "1.7.11"
-solana-sdk = "1.7.11"
+solana-program-test = "1.14.3"
+solana-sdk = "1.14.3"
 
 [lib]
 crate-type = ["cdylib", "lib"]

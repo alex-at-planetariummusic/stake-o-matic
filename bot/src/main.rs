@@ -5,6 +5,7 @@ use crate::performance_db_utils::{
 use crate::stake_pool_v0::MIN_STAKE_ACCOUNT_BALANCE;
 use crate::validators_app::CommissionChangeIndexHistoryEntry;
 use crate::Cluster::{MainnetBeta, Testnet};
+use reqwest::Url;
 use {
     crate::{db::*, generic_stake_pool::*, rpc_client_utils::*},
     chrono::{Duration as ChronoDuration, Utc},
@@ -1173,7 +1174,7 @@ fn get_self_stake_by_vote_account(
                     let effective_stake = stake
                         .delegation
                         .stake_activating_and_deactivating(epoch, Some(&stake_history))
-                        .0;
+                        .effective;
                     if effective_stake > 0 {
                         *self_stake_by_vote_account.entry(*vote_address).or_default() +=
                             effective_stake;
@@ -1523,7 +1524,7 @@ fn classify(
         let poor_testnet_reporters: Option<Vec<(Pubkey, String)>> = if config.cluster == MainnetBeta
         {
             let testnet_rpc_client = RpcClient::new_with_timeout(
-                DEFAULT_TESTNET_JSON_RPC_URL.into(), // TODO: should be configurable
+                Url::parse(DEFAULT_TESTNET_JSON_RPC_URL)?, // TODO: should be configurable
                 Duration::from_secs(180),
             );
             let testnet_epoch = testnet_rpc_client.get_epoch_info()?.epoch;
